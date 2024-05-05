@@ -45,6 +45,7 @@ END
 
 ## Training, validation, and test datasets
 Datasets are available at http://dna.cs.miami.edu/PANDA-3D/download_files/alphafoldDB_pdb_1115/
+
 Proteins are randomly split into training (80%), validation (10%), and testing (10%). The UniProt IDs for training, validation, and testing are saved into train_0130_df.pkl, valid_0130_df.pkl, and test_0130_iden_pd3_dpfri.pkl, respectively.
 
 The protein features, including UniProt ID, true GO annotations, 3D coordinates, GO term label, pLDDT scores, amino acid sequence, ESM features, and sequence length, are saved into a pickle file in the format of a Python dictionary. These features are further divided into subfolders based on the first two letters of the protein ID. For example, the features of protein A0A0A1C3I2 can be found in A0/A0A0A1C3I2.pkl.
