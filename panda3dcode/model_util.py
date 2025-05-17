@@ -11,6 +11,7 @@ import esm
 from torch.utils.data import Dataset
 from util import CoordBatchConverter, load_coords
 from Bio import SeqIO
+import gzip
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -44,46 +45,70 @@ class CreateDataset(Dataset):
         return feat_dic
 
 
+from tqdm import tqdm
 class CreateDataset_Server(Dataset):
     def __init__(self, database_dir, batch_size = None):
         self.database_dir = database_dir
         # load all pdb files
         self.pdb_fs = glob.glob(self.database_dir+'/*pdb')
+        self.pdb_fs += glob.glob(self.database_dir+'/*pdb.gz')
+        # print(self.pdb_fs)
         # load esm
         self.model, alphabet = esm.pretrained.esm1_t34_670M_UR50S()
+        self.model.to('cuda')
         self.batch_converter = alphabet.get_batch_converter()
         # gather features
         proteins, esm1vs, coords, seqs, padding_mask, plddts = [], [], [], [], [], []
-        for pdb_f in self.pdb_fs:
-            protein_ = pdb_f.split('/')[-1].replace('.pdb','')
+        for pdb_f in tqdm(self.pdb_fs, total=len(self.pdb_fs), smoothing=0, desc='Loading PDBs'):
+            protein_ = pdb_f.split('/')[-1].replace('.pdb.gz','').replace('.pdb','')
+            # print("Getting fasta")
             chain_, seq_ = self.pdb_fasta(pdb_f)
+            # print("Getting coords")
             coord_, _ = load_coords(pdb_f, chain_)
+            # print("Getting plddt")
             plddt_ = self.parser_plddt(pdb_f)
+            # print("Getting esm")
             esm_ = self.fasta_esm(seq_)
             #print(f'>{protein_}\n{seq_}\n')
             #print(pdb_f, chain_, len(seq_), type(coord_), type(plddt_), type(esm_))
             proteins.append(protein_); esm1vs.append(esm_); coords.append(coord_); seqs.append(seq_); plddts.append(plddt_)
+        esm1vs = [esm_.cpu().numpy() for esm_ in esm1vs]
         self.df_ = pd.DataFrame({'protein':proteins, 'esm1v':esm1vs, 'coords':coords, 'seq':seqs, 'plddt':plddts})
 
     def pdb_fasta(self, f_):
         """assume only one chain in pdb"""
-        for record in SeqIO.parse(f_, "pdb-seqres"):
-            return record.annotations["chain"], str(record.seq)
+        if f_.endswith('.pdb.gz'):
+            with gzip.open(f_, 'rt') as file:
+                for record in SeqIO.parse(file, "pdb-seqres"):
+                    return record.annotations["chain"], str(record.seq)
+        else:
+            for record in SeqIO.parse(f_, "pdb-seqres"):
+                return record.annotations["chain"], str(record.seq)
 
     def parser_plddt(self, f_):
         plddts = []
-        for line in open(f_,'r').readlines():
-            if line[:4] == 'ATOM' and line[13:15] == 'CA':
-                plddts.append(np.float32(line[61:66]))
+        if f_.endswith('.pdb.gz'):
+            with gzip.open(f_, 'rt') as file:
+                for line in file.readlines():
+                    if line[:4] == 'ATOM' and line[13:15] == 'CA':
+                        plddts.append(np.float32(line[61:66]))
+        else:
+            for line in open(f_,'r').readlines():
+                if line[:4] == 'ATOM' and line[13:15] == 'CA':
+                    plddts.append(np.float32(line[61:66]))
         return np.array(plddts)
 
     def fasta_esm(self, fasta):
         data = [('',fasta)] #'subunit','fasta'
+        # print("Converting to batch")
         batch_labels, batch_strs, batch_tokens = self.batch_converter(data)
+        batch_tokens = batch_tokens.to('cuda')
         with torch.no_grad():
+            # print("Running esm model")
             results = self.model(batch_tokens, repr_layers=[34])
         token_embeddings = results["representations"][34]
-        pred = token_embeddings[0].numpy()[1:]
+        # pred = token_embeddings[0].numpy()[1:]
+        pred = token_embeddings[0][1:]
         return pred
 
     def __len__(self):

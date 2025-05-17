@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as data
 from typing import Sequence, Tuple, List
-
+import gzip
 from esm.data import BatchConverter
 
 
@@ -38,6 +38,10 @@ def load_structure(fpath, chain=None):
         structure = pdbx.get_structure(pdbxf, model=1)
     elif fpath.endswith('pdb'):
         with open(fpath) as fin:
+            pdbf = pdb.PDBFile.read(fin)
+        structure = pdb.get_structure(pdbf, model=1)
+    elif fpath.endswith('pdb.gz'):
+        with gzip.open(fpath, 'rt') as fin:
             pdbf = pdb.PDBFile.read(fin)
         structure = pdb.get_structure(pdbf, model=1)
     bbmask = filter_backbone(structure)

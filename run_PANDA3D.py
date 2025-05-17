@@ -29,12 +29,14 @@ import esm
 from model_util import get_n_params, CreateDataset_Server, BatchGvpesmConverter
 from torch.utils.data import DataLoader
 
+from tqdm import tqdm
+
 def predicate(model, device, dataloader, prediction_go_mask):
     model.eval()
     loss_batch = []
     protein, prediction = [], []
     with torch.no_grad():
-        for i,data in enumerate(dataloader):
+        for i,data in enumerate(tqdm(dataloader, total=len(dataloader), smoothing=0, desc='Predicting')):
             model_out = model(data['esm1vs'],data['coords'], data['seqs'], data['padding_mask'], data['plddts'],
                         return_all_hiddens=False)
             logits = torch.squeeze(model_out[0],1)
@@ -67,7 +69,7 @@ def prediction2text(alphabet, predictions, prediction_format_f):
     prediction_format_fh.write('END\n')
     prediction_format_fh.close()
 
-if True:
+def main(input_dir, out_dir):
     # python train.py
     start = time.time()
     args_f = f'{tag_}/args.json'
@@ -80,9 +82,7 @@ if True:
     terms = list(pd.read_pickle(tag_ + model_args.terms_pkl))
     alphabet_go = Alphabet_goclean(terms)
 
-    input_dir = sys.argv[1]
     out_model = tag_ + f'trained.model'
-    out_dir = f'{input_dir}'
     out_file = f'{out_dir}/prediction.txt'
     
     # all tokens: GO-> True; others-> False
@@ -102,3 +102,7 @@ if True:
     test_df = predicate(model, model_args.device[0], test_dataloader, prediction_go_mask)
     prediction2text(alphabet_go, test_df,  out_file)
     #print(f'done, save to {out_file}')
+
+if __name__ == '__main__':
+    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else sys.argv[1])
+
