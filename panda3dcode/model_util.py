@@ -52,28 +52,40 @@ class CreateDataset_Server(Dataset):
         # load all pdb files
         self.pdb_fs = glob.glob(self.database_dir+'/*pdb')
         self.pdb_fs += glob.glob(self.database_dir+'/*pdb.gz')
+        # self.pdb_fs = self.pdb_fs[:10]
         # print(self.pdb_fs)
         # load esm
         self.model, alphabet = esm.pretrained.esm1_t34_670M_UR50S()
         self.model.to('cuda')
         self.batch_converter = alphabet.get_batch_converter()
-        # gather features
-        proteins, esm1vs, coords, seqs, padding_mask, plddts = [], [], [], [], [], []
-        for pdb_f in tqdm(self.pdb_fs, total=len(self.pdb_fs), smoothing=0, desc='Loading PDBs'):
-            protein_ = pdb_f.split('/')[-1].replace('.pdb.gz','').replace('.pdb','')
-            # print("Getting fasta")
-            chain_, seq_ = self.pdb_fasta(pdb_f)
-            # print("Getting coords")
-            coord_, _ = load_coords(pdb_f, chain_)
-            # print("Getting plddt")
-            plddt_ = self.parser_plddt(pdb_f)
-            # print("Getting esm")
-            esm_ = self.fasta_esm(seq_)
-            #print(f'>{protein_}\n{seq_}\n')
-            #print(pdb_f, chain_, len(seq_), type(coord_), type(plddt_), type(esm_))
-            proteins.append(protein_); esm1vs.append(esm_); coords.append(coord_); seqs.append(seq_); plddts.append(plddt_)
-        esm1vs = [esm_.cpu().numpy() for esm_ in esm1vs]
-        self.df_ = pd.DataFrame({'protein':proteins, 'esm1v':esm1vs, 'coords':coords, 'seq':seqs, 'plddt':plddts})
+
+        # Store only file paths initially
+        self.df_ = pd.DataFrame({'pdb_file':self.pdb_fs})
+
+        ## gather features
+        #proteins, esm1vs, coords, seqs, padding_mask, plddts = [], [], [], [], [], []
+        #CHUNKSIZE = 100
+        #pdb_fs_chunks = [self.pdb_fs[i:i + CHUNKSIZE] for i in range(0, len(self.pdb_fs), CHUNKSIZE)]
+        
+        #for i, pdb_fs_chunk in enumerate(pdb_fs_chunks):
+        #    print(f'Loading PDBs chunk {i}/{len(pdb_fs_chunks)}')
+        #    chunk_esm1vs = []
+        #    for pdb_f in tqdm(pdb_fs_chunk, total=len(pdb_fs_chunk), smoothing=0, desc=f'Loading PDBs {i}'):
+        #        protein_ = pdb_f.split('/')[-1].replace('.pdb.gz','').replace('.pdb','')
+        #        # print("Getting fasta")
+        #        chain_, seq_ = self.pdb_fasta(pdb_f)
+        #        # print("Getting coords")
+        #        coord_, _ = load_coords(pdb_f, chain_)
+        #        # print("Getting plddt")
+        #        plddt_ = self.parser_plddt(pdb_f)
+        #        # print("Getting esm")
+        #        esm_ = self.fasta_esm(seq_)
+        #        #print(f'>{protein_}\n{seq_}\n')
+        #        #print(pdb_f, chain_, len(seq_), type(coord_), type(plddt_), type(esm_))
+        #        proteins.append(protein_); chunk_esm1vs.append(esm_); coords.append(coord_); seqs.append(seq_); plddts.append(plddt_)
+        #    esm1vs.extend([esm_.cpu().numpy() for esm_ in chunk_esm1vs])
+        #    torch.cuda.empty_cache()
+        #self.df_ = pd.DataFrame({'protein':proteins, 'esm1v':esm1vs, 'coords':coords, 'seq':seqs, 'plddt':plddts})
 
     def pdb_fasta(self, f_):
         """assume only one chain in pdb"""
@@ -115,7 +127,24 @@ class CreateDataset_Server(Dataset):
         return len(self.df_)
 
     def __getitem__(self, idx):
-        return self.df_.iloc[idx]
+        # return self.df_.iloc[idx]
+
+        pdb_f = self.df_.iloc[idx]['pdb_file']
+
+        protein_ = pdb_f.split('/')[-1].replace('.pdb.gz','').replace('.pdb','')
+        # print("Getting fasta")
+        chain_, seq_ = self.pdb_fasta(pdb_f)
+        # print("Getting coords")
+        coord_, _ = load_coords(pdb_f, chain_)
+        # print("Getting plddt")
+        plddt_ = self.parser_plddt(pdb_f)
+        # print("Getting esm")
+        esm_ = self.fasta_esm(seq_)
+        #print(f'>{protein_}\n{seq_}\n')
+        #print(pdb_f, chain_, len(seq_), type(coord_), type(plddt_), type(esm_))
+        torch.cuda.empty_cache()
+        # proteins.append(protein_); chunk_esm1vs.append(esm_); coords.append(coord_); seqs.append(seq_); plddts.append(plddt_)
+        return {'protein': protein_, 'esm1v': esm_, 'coords': coord_, 'seq': seq_, 'plddt': plddt_}
 
 
 class BatchGvpesmConverter(object):
@@ -138,7 +167,7 @@ class BatchGvpesmConverter(object):
         max_len = max(esm1v.shape[0] for esm1v in esm1vs)
         esm1vs_padded = torch.full((batch_size,max_len+2,esm1vs[0].shape[1]),0.)
         for i, esm1v in enumerate(esm1vs):
-            esm1vs_padded[i,1:esm1v.shape[0]+1] = torch.from_numpy(esm1v)
+            esm1vs_padded[i,1:esm1v.shape[0]+1] = torch.from_numpy(esm1v) if type(esm1v) == np.ndarray else esm1v
         if self.device is not None:
             esm1vs_padded = esm1vs_padded.to(self.device)
         return esm1vs_padded
