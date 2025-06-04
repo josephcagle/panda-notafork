@@ -1,0 +1,2 @@
+filename	ns	tau	n	tp	fp	fn	pr	rc	cov	mi	ru	f	s	pr_micro	rc_micro	f_micro	n_w	tp_w	fp_w	fn_w	pr_w	rc_w	cov_w	mi_w	ru_w	f_w	s_w	pr_micro_w	rc_micro_w	f_micro_w	cov_max
+prediction.txt.prepped	molecular_function	0.850	1636.000	2.829	4.134	406.776	0.449	0.235	0.021	4.134	406.776	0.308	406.797	0.406	0.007	0.014	1563.000	3.563	6.145	643.097	0.421	0.224	0.020	6.145	643.097	0.292	643.126	0.367	0.006	0.011	0.044
