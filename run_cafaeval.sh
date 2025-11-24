@@ -5,7 +5,7 @@ source $HOME/code/CAFA-evaluator/venv/bin/activate
 
 OBOFILE=$HOME/code/APF/Train/go-basic.obo
 OBOFILE_PREPPED=$HOME/code/PANDA-3D/$(basename $OBOFILE).prepped
-PREDFILE=$HOME/code/PANDA-3D/prediction.txt
+PREDFILE=$HOME/code/PANDA-3D/prediction_filtered_0.6.txt
 PREDDIR=$HOME/code/PANDA-3D/predictions
 TRUTHFILE=$HOME/code/APF/Train/train_terms.tsv
 TRUTHFILE_PREPPED=$HOME/code/PANDA-3D/$(basename $TRUTHFILE).prepped
